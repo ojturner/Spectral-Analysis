@@ -178,6 +178,6 @@ for name in data:
 	plt.show()
 
 	#since the above is a bit rubbish let's try fitting with lmfit 
-	#
+	#HELLO
 
 
