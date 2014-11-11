@@ -14,9 +14,27 @@ sys.path.append('/Users/owenturner/Documents/PhD/SUPA_Courses/AdvancedDataAnalys
 import toolkit
 import pyfits
 
+######################################################################################
+#MODULE: readFits
+#
+#PURPOSE:
+#Read in these SDSS fits files and find the flux and wavelength
+#
+#
+#INPUTS:
+#
+#			inFile: full name of a fits file in the current directory
+#					Note this is currently looped externally to the module
+#
+#
+#OUTPUTS: 	dictionary: with keys 'flux', 'wavelength', 'z', 'continuum', 'error'
+#						corresponding to the attributes extracted from the fits file
+#						
+#
+#USAGE: 	results_dict = readFits(inFile)
+#######################################################################################
 
-#read in these SDSS fits files and find the flux and wavelength
-#Also fit the continuum emission from the galaxy
+
 def readFits(inFile): 
 	#import the relevant modules
 		
@@ -32,13 +50,10 @@ def readFits(inFile):
 	#coefs = poly.polyfit(wavelength, flux, 8, w=ivar)
 	#ffit = poly.polyval(wavelength, coefs)
 
-	mod2 = PolynomialModel(6)
-	pars = mod2.guess(flux, x=wavelength)
-	out  = mod2.fit(flux, pars, x=wavelength)
 	#print(out.fit_report(min_correl=0.25))
 	#plt.plot(wavelength, out.best_fit, 'r-', linewidth=2)
 
-		#Choose to plot the results 
+	#Choose to plot the results 
 	#plt.plot(wavelength, flux, label='flux')
 	#plt.plot(wavelength, y_av, label='boxcar')
 	#plt.plot(wavelength, ffit , label='fit')
@@ -47,98 +62,147 @@ def readFits(inFile):
 	#plt.close('all')
 
 	
-	return {'flux' : flux, 'wavelength' : wavelength, 'z' : redshift_data, 'continuum': out.best_fit, 'error': weights}
+	return {'flux' : flux, 'wavelength' : wavelength, 'z' : redshift_data, 'weights': weights}
 
-def fitLines(flux, wavelength, z, continuum, error): 	
 
-#First attempt fitting a gaussian with all the data before masking off most of it
-#Will first fit the H-alpha line so define the wavelength of H-alpha (angstroms)
-#################################################################
-#POSSIBLY THESE SHOULD INVOLVE A VACUUM CORRECTION 
-#################################################################
+
+##########################################################################################
+#MODULE: fitLines
+#
+#PURPOSE:
+#Use the results of the readFits method to first model and subtract the continuum emission 
+#and then fit gaussians to the H-alpha, H-beta, OIII4959, OIII5007 emission lines
+#so that the flux of these emission lines can be measured.
+#
+#INPUTS:
+#
+#			flux: The full array of photon counts read in from a fits file
+#			wavelength: The corresponding wavelength values of the counts 
+#			z: The redshift of the source 		
+#			weights: Individual inverse variance weights on the fluxes
+#
+#OUTPUTS: 	dictionary: with keys corresponding to the names of the emission lines 
+#						each key contains 3 elements for the amplitude, sigma and fwhm
+#						of the fitted gaussians
+#
+#USAGE: 	results_dict = fitLines(flux, wavelength, z, weights)
+#######################################################################################
+
+
+def fitLines(flux, wavelength, z, weights): 	
 
 	#Convert all into numpy arrays 
 	flux = np.array(flux)
 	wavelength = np.array(wavelength)
 	z = np.array(z)
-	continuum = np.array(continuum)
-	error = np.array(error)
+	weights = np.array(weights)
 
+	#Fit a polynomial to the continuum background emission of the galaxy
+	mod = PolynomialModel(6)
+	pars = mod.guess(flux, x=wavelength)
+	out  = mod.fit(flux, pars, x=wavelength)
+	continuum = out.best_fit
+
+	#Subtract the continuum from the flux, just use polynomial fit right now 
+	counts = flux - continuum
+
+	#Define the wavelength values of the relevant emission lines
 	H_beta = 4862.721
 	H_alpha = 6564.614
-	OIIIfirst = 4960.295
-	OIIIsecond = 5008.239
+	OIII4959 = 4960.295
+	OIII5007 = 5008.239
+	NII6585 = 6585.27
 
 	#Now apply the redshift formula to find where this will be observed
 	H_alpha_shifted = H_alpha * (1 + z)
 	H_beta_shifted = H_beta * (1 + z)
-	OIIIfirst_shifted = OIIIfirst * (1 + z)
-	OIIIsecond_shifted = OIIIsecond * (1 + z)
+	OIII4959_shifted = OIII4959 * (1 + z)
+	OIII5007_shifted = OIII5007 * (1 + z)
+	NII6585_shifted = NII6585 * (1 + z)
 
-	#Subtract the continuum from the flux, just use polynomial fit right now 
-	counts = flux - continuum
+	#Construct a dictionary housing these shifted emission line values 
+	line_dict = {'H_alpha' : H_alpha_shifted, 'H_beta' : H_beta_shifted, 
+	'OIII4959' : OIII4959_shifted, 'OIII5007' : OIII5007_shifted, 'NII6585' : NII6585_shifted}
+
+	#Plot the initial continuum subtracted spectrum
+	plt.plot(wavelength, counts)
+
+	#Initialise a dictionary for the results in the for loop
+	results_dict = {}
+
+	#Begin for loop to fit an arbitrary number of emission lines
+	for key in line_dict:
 	
 	########################################################################
 	#FITTING EACH OF THE EMISSION LINES IN TURN
 	########################################################################
 	#We don't want to include all the data in the gaussian fit 
 	#Look for the indices of the points closes to the wavelength value
-	#The appropriate range is stored in fit_wavelength
-	#Can always revert to the old way of doing it by just replacing 
-	#the fit_ quantities with what they were before 
-	#Or looking in the git commit section and accessing the old file
+	#The appropriate range is stored in fit_wavelength etc.
 
 	#Use np.where to find the indices of data surrounding the gaussian
-	index = np.where( wavelength > (H_alpha_shifted - 10) )
-	new_wavelength = wavelength[index]
-	new_counts = counts[index]
-	new_error = error[index]
-	new_index = np.where( new_wavelength < (H_alpha_shifted + 10))
+		index = np.where( wavelength > (line_dict[key] - 10) )
+		new_wavelength = wavelength[index]
+		new_counts = counts[index]
+		new_weights = weights[index]
+		new_index = np.where( new_wavelength < (line_dict[key] + 10))
 
 	#Select only data for the fit with these indices
-	fit_wavelength = new_wavelength[new_index]
-	fit_counts = new_counts[new_index]
-	fit_error = new_error[new_index]
+		fit_wavelength = new_wavelength[new_index]
+		fit_counts = new_counts[new_index]
+		fit_weights = new_weights[new_index]
 
 	#Now use the lmfit package to perform gaussian fits to the data	
 	#Construct the gaussian model
-	mod = GaussianModel()
+		mod = GaussianModel()
 
 	#Take an initial guess at what the model parameters are 
 	#In this case the gaussian model has three parameters, 
 	#Which are amplitude, center and sigma
-	pars = mod.guess(fit_counts, x=fit_wavelength)
+		pars = mod.guess(fit_counts, x=fit_wavelength)
 
 	#We know from the redshift what the center of the gaussian is, set this
 	#And choose the option not to vary this parameter 
 	#Leave the guessed values of the other parameters
-	pars['center'].set(value = H_alpha_shifted)
-	pars['center'].set(vary = 'False')
+		pars['center'].set(value = line_dict[key])
+		pars['center'].set(vary = 'False')
 
 	#Now perform the fit to the data using the set and guessed parameters 
 	#And the inverse variance weights form the fits file 
-	out  = mod.fit(fit_counts, pars, weights = fit_error, x=fit_wavelength)
-	print(out.fit_report(min_correl=0.25))
+		out  = mod.fit(fit_counts, pars, weights = fit_weights, x=fit_wavelength)
+		print(out.fit_report(min_correl=0.25))
 
 	#Plot the results and the spectrum to check the fit
-	plt.plot(fit_wavelength, out.best_fit, 'r-')
-	plt.plot(wavelength, counts)
+		plt.plot(fit_wavelength, out.best_fit, 'r-')
+	
 
 	#The amplitude parameter is the area under the curve, equivalent to the flux
-	amplitude_Ha = out.best_values['amplitude']
-	width_Ha = out.best_values['sigma']
-	fwhm_Ha = out.best_values['fwhm']
+		results_dict[key] = [out.best_values['amplitude'], out.best_values['sigma'], 2.3548200*out.best_values['sigma']]
 	
-	#Store these values inside a results vector for H_a 
-	H_a_results = [amplitude, width_Ha, fwhm_Ha]
-
-	#Repeat the process for the other emission lines, for loop? 
-
 
 	#The return dictionary for this method is a sequence of results vectors
-	return {'H_a_results': H_a_results, 'H_B_results': H_B_results, 
-	'OIII4959_results': OIII4959_results, 'OIII5007_results': OIII5007_results, }
+	return results_dict
 
+##########################################################################################
+#MODULE: galPhys
+#
+#PURPOSE:
+#Use the results of the fitLines method to calculate physical quantities for the galaxies 
+#
+#INPUTS:
+#
+#			flux: The full array of photon counts read in from a fits file
+#			wavelength: The corresponding wavelength values of the counts 
+#			z: The redshift of the source 		
+#			weights: Individual inverse variance weights on the fluxes
+#
+#OUTPUTS: 	dictionary: with keys corresponding to the names of the emission lines 
+#						each key contains 3 elements for the amplitude, sigma and fwhm
+#						of the fitted gaussians
+#
+#USAGE: 	results_dict = fitLines(flux, wavelength, z, weights)
+#######################################################################################
+#def galPhys():
 
 
 data=np.genfromtxt('names.txt', dtype=None)
@@ -147,14 +211,15 @@ for name in data:
 	flux = dict_results['flux']		
 	wavelength = dict_results['wavelength']
 	z = dict_results['z']
-	continuum = dict_results['continuum']
-	error = dict_results['error']
+	weights = dict_results['weights']
 
 	#Fit the emission lines using the defined methods
-	flux_Ha = fitLines(flux, wavelength, z, continuum, error)
+	fit_results = fitLines(flux, wavelength, z, weights)
+	print fit_results
+	plt.show()
 
 	#The given flux is in 10^-17 ergs / s / cm^2
-	flux_Ha = flux_Ha * 1E-17 
+	flux_Ha = fit_results['H_alpha'][0] * 1E-17 
 
 	#fitHbeta(flux, wavelength, z, continuum, error)
 	#fitOIIIfirst(flux, wavelength, z, continuum, error)
@@ -175,9 +240,9 @@ for name in data:
 	SFR = np.log10(Lum_Ha) - 41.27
 	print SFR
 	print flux_Ha
-	plt.show()
+
 
 	#since the above is a bit rubbish let's try fitting with lmfit 
-	#
+	
 
 
