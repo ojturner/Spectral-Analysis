@@ -5,7 +5,7 @@ from pylab import *
 from matplotlib.colors import LogNorm
 import numpy.polynomial.polynomial as poly
 import lmfit
-from lmfit.models import GaussianModel, ExponentialModel, LorentzianModel, VoigtModel
+from lmfit.models import GaussianModel, ExponentialModel, LorentzianModel, VoigtModel, PolynomialModel
 
 #temporarily add my toolkit.py file to the PYTHONPATH
 sys.path.append('/Users/owenturner/Documents/PhD/SUPA_Courses/AdvancedDataAnalysis/Homeworks')
@@ -26,10 +26,17 @@ def readFits(inFile):
 	flux = data.field('flux')
 	wavelength = 10**(data.field('loglam'))
 	ivar = data.field('ivar')
-	error = np.sqrt(1/ivar)
-	y_av = toolkit.movingaverage(flux, 50)
-	coefs = poly.polyfit(wavelength, flux, 8, w=ivar)
-	ffit = poly.polyval(wavelength, coefs)
+	weights = ivar
+	redshift_data = table[2].data.field('Z')
+	#y_av = toolkit.movingaverage(flux, 50)
+	#coefs = poly.polyfit(wavelength, flux, 8, w=ivar)
+	#ffit = poly.polyval(wavelength, coefs)
+
+	mod2 = PolynomialModel(6)
+	pars = mod2.guess(flux, x=wavelength)
+	out  = mod2.fit(flux, pars, x=wavelength)
+	#print(out.fit_report(min_correl=0.25))
+	#plt.plot(wavelength, out.best_fit, 'r-', linewidth=2)
 
 		#Choose to plot the results 
 	#plt.plot(wavelength, flux, label='flux')
@@ -39,8 +46,8 @@ def readFits(inFile):
 	#plt.show()
 	#plt.close('all')
 
-	redshift_data = table[2].data.field('Z')
-	return {'flux' : flux, 'wavelength' : wavelength, 'z' : redshift_data, 'continuum': ffit, 'error': error}
+	
+	return {'flux' : flux, 'wavelength' : wavelength, 'z' : redshift_data, 'continuum': out.best_fit, 'error': weights}
 
 def fitLines(flux, wavelength, z, continuum, error): 	
 
@@ -70,12 +77,10 @@ def fitLines(flux, wavelength, z, continuum, error):
 
 	#Subtract the continuum from the flux, just use polynomial fit right now 
 	counts = flux - continuum
-
-
-	#Fit a gaussian to this emission line by optimal scaling of the parameter A 
-	#Have to choose a value for the spectral resolution R 
 	
-
+	########################################################################
+	#FITTING EACH OF THE EMISSION LINES IN TURN
+	########################################################################
 	#We don't want to include all the data in the gaussian fit 
 	#Look for the indices of the points closes to the wavelength value
 	#The appropriate range is stored in fit_wavelength
@@ -83,51 +88,35 @@ def fitLines(flux, wavelength, z, continuum, error):
 	#the fit_ quantities with what they were before 
 	#Or looking in the git commit section and accessing the old file
 
+	#Use np.where to find the indices of data surrounding the gaussian
 	index = np.where( wavelength > (H_alpha_shifted - 10) )
 	new_wavelength = wavelength[index]
 	new_counts = counts[index]
 	new_error = error[index]
 	new_index = np.where( new_wavelength < (H_alpha_shifted + 10))
+
+	#Select only data for the fit with these indices
 	fit_wavelength = new_wavelength[new_index]
 	fit_counts = new_counts[new_index]
 	fit_error = new_error[new_index]
 
-
-
-	#gauss1  = GaussianModel(prefix='g1_')
-
-	#pars = gauss1.make_params()
-	#pars.update( gauss1.make_params())
-
-	#pars['g1_center'].set(H_alpha_shifted)
-	#pars['g1_sigma'].set(1)
-	#pars['g1_amplitude'].set(80, min=0, max=300)
-
-	#gauss2  = GaussianModel(prefix='g2_')
-	#pars.update(gauss2.make_params())
-
-	#pars['g2_center'].set(H_beta_shifted)
-	#pars['g2_sigma'].set(1)
-	#pars['g2_amplitude'].set(10)
-
-	#mod = gauss1 + gauss2 
-
-	#init = mod.eval(pars, x=wavelength)
-	
-	#plt.plot(wavelength, init, 'k--')
-
-	#out = mod.fit(counts, pars, x=wavelength)
-
-	#print(out.fit_report())
-	#print pars
-
-	
-
+	#Now use the lmfit package to perform gaussian fits to the data	
+	#Construct the gaussian model
 	mod = GaussianModel()
+
+	#Take an initial guess at what the model parameters are 
+	#In this case the gaussian model has three parameters, 
+	#Which are amplitude, center and sigma
 	pars = mod.guess(fit_counts, x=fit_wavelength)
-	pars['center'].set(H_alpha_shifted)
-	#pars['amplitude'].set(400, min=0, max=1000)
-	out  = mod.fit(fit_counts, pars, x=fit_wavelength)
+
+	#We know from the redshift what the center of the gaussian is, set this
+	#And choose the option not to vary this parameter 
+	#Leave the guessed values of the other parameters
+	pars['center'].set(value = H_alpha_shifted)
+	pars['center'].set(vary = 'False')
+
+	
+	out  = mod.fit(fit_counts, pars, weights = fit_error, x=fit_wavelength)
 	print(out.fit_report(min_correl=0.25))
 	plt.plot(fit_wavelength, out.best_fit, 'r-')
 	plt.plot(wavelength, counts)
@@ -316,19 +305,20 @@ for name in data:
 
 	#Find the luminosity distance of the object at redshift z 
 	#Convert the luminosity distance to cm  
-	D_L = toolkit.cosmoDistanceQuad(z, 70, 0.28, 0.72)['D_L']
+	D_L = toolkit.cosmoDistanceQuad(z, 69.6, 0.286, 0.714)['D_L']
 
 	D_L = D_L * 3.086E26
-	print D_L
+	
 
 	#Compute H-alpha Luminosity in ergs / s
 	Lum_Ha = 4 * np.pi * (D_L**2) * flux_Ha
+	print Lum_Ha
 
 	#Compute the star formation rate from the Kennicutt formula 
 	SFR = np.log10(Lum_Ha) - 41.27
 	print SFR
 	print flux_Ha
-	#plt.show()
+	plt.show()
 
 	#since the above is a bit rubbish let's try fitting with lmfit 
 	#
