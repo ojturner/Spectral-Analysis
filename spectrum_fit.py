@@ -179,7 +179,7 @@ def fitLines(flux, wavelength, z, weights):
 	SII6718_shifted = SII6718 * (1 + z)
 	SII6732_shifted = SII6732 * (1 + z)
 
-	#hello
+	#hellofriend
 	#Will choose to mask pm 15 for each of the lines
 	H_beta_index = np.where(np.logical_and(wavelength>=(H_beta_shifted - 15), wavelength<=(H_beta_shifted + 15)))
 	OIII_one_index = np.where(np.logical_and(wavelength>=(OIII4959_shifted - 15), wavelength<=(OIII4959_shifted + 15)))
