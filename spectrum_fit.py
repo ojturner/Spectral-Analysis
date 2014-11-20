@@ -73,7 +73,46 @@ def readFits(inFile):
 	
 	return {'flux' : flux, 'wavelength' : wavelength, 'z' : redshift_data, 'weights': weights}
 
+##########################################################################################
+#MODULE: templateRedshift
+#
+#PURPOSE:
+#Take both the normalised template flux and crude normalised observed flux (or should 
+#this be continuum subtracted?) and shift the template to find the redshift value
+#the idea is to write this for a single template so that it can be looped around for many
+#
+#INPUTS:
+#
+#			wavelength: base wavelength array to plot against
+#			t_flux: normalised template flux to 1  
+#			flux: normalised observed flux to 1 		
+#			
+#
+#OUTPUTS: 	z: Best redshift estimate from that template 
+#
+#USAGE: 	redshift = templateRedshift(wavelength, t_flux, flux)
+#######################################################################################
 
+
+def templateRedshift(wavelength, t_flux, flux):
+
+	#Convert to numpy arrays
+	wavelength = np.array(wavelength)
+	t_flux = np.array(t_flux)
+	flux = np.array(flux)
+
+	#Now the t_flux and flux arrays will be of different lengths, 
+	#append zeros to the shorter array 
+
+	if (len(t_flux) - len(flux)) < 0:
+		while len(t_flux < len(flux)):
+			t_flux.append(1)
+
+	else:
+		while len(flux < len(t_flux)):
+			flux.append(1)
+
+	#So now both the flux and t_flux vectors are the same length hopefully		
 
 ##########################################################################################
 #MODULE: fitLines
@@ -107,15 +146,15 @@ def fitLines(flux, wavelength, z, weights):
 	weights = np.array(weights)
 
 	#Fit a polynomial to the continuum background emission of the galaxy
+	#This is the crude way to do it 
 	mod = PolynomialModel(6)
 	pars = mod.guess(flux, x=wavelength)
 	out  = mod.fit(flux, pars, x=wavelength)
-	continuum = out.best_fit
+	continuum_poly = out.best_fit
 
-	print np.mean(continuum)
+	#Can also compute the continuum in the more advanced way
+	#masking the emission lines and using a moving average
 
-	#Subtract the continuum from the flux, just use polynomial fit right now 
-	counts = flux - continuum
 
 	#Define the wavelength values of the relevant emission lines
 	OII3727 = 3727.092
@@ -139,6 +178,47 @@ def fitLines(flux, wavelength, z, weights):
 	NII6585_shifted = NII6585 * (1 + z)
 	SII6718_shifted = SII6718 * (1 + z)
 	SII6732_shifted = SII6732 * (1 + z)
+
+	#hello
+	#Will choose to mask pm 15 for each of the lines
+	H_beta_index = np.where(np.logical_and(wavelength>=(H_beta_shifted - 15), wavelength<=(H_beta_shifted + 15)))
+	OIII_one_index = np.where(np.logical_and(wavelength>=(OIII4959_shifted - 15), wavelength<=(OIII4959_shifted + 15)))
+	OIII_two_index = np.where(np.logical_and(wavelength>=(OIII5007_shifted - 15), wavelength<=(OIII5007_shifted + 15)))
+	NII_one_index = np.where(np.logical_and(wavelength>=(NII6585_shifted - 15), wavelength<=(NII6585_shifted + 15)))
+	H_alpha_index = np.where(np.logical_and(wavelength>=(H_alpha_shifted - 15), wavelength<=(H_alpha_shifted + 15)))
+	SII_one_index = np.where(np.logical_and(wavelength>=(SII6718_shifted - 15), wavelength<=(SII6718_shifted + 15)))
+	SII_two_index = np.where(np.logical_and(wavelength>=(SII6732_shifted - 15), wavelength<=(SII6732_shifted + 15)))
+
+	#define the mask 1 values from the index values
+	mask = np.zeros(len(flux))
+	mask[H_beta_index] = 1
+	mask[OIII_one_index] = 1
+	mask[OIII_two_index] = 1
+	mask[NII_one_index] = 1
+	mask[H_alpha_index] = 1
+	mask[SII_one_index] = 1
+	mask[SII_two_index] = 1
+
+	#Now apply these to the flux to mask 
+	masked_flux = ma.masked_array(flux, mask=mask)
+
+	#Make my own with np.mean()
+	continuum = np.empty(len(masked_flux))
+	for i in range(len(masked_flux)):
+
+		if (i + 10) < len(masked_flux):
+			continuum[i] = ma.median(masked_flux[i:i+5])
+			if np.isnan(continuum[i]):
+				continuum[i] = continuum[i - 1]
+		else:
+			continuum[i] = ma.median(masked_flux[i-5:i])
+			if np.isnan(continuum[i]):
+				continuum[i] = continuum[i - 1]
+
+	
+
+	#Subtract the continuum from the flux, just use polynomial fit right now 
+	counts = flux - continuum
 
 	#Construct a dictionary housing these shifted emission line values 
 	#Note that values for the OII doublet are not present
@@ -303,8 +383,6 @@ def normaliseTemplate(inFile):
 	NII_two_index = np.where(np.logical_and(wavelength>=(NII_two - 15), wavelength<=(NII_two + 15)))
 	SII_one_index = np.where(np.logical_and(wavelength>=(SII_one - 15), wavelength<=(SII_one + 15)))
 	SII_two_index = np.where(np.logical_and(wavelength>=(SII_two - 15), wavelength<=(SII_two + 15)))
-
-	index_list = np.append(OII_index, H_beta_index)
 
 	#define the mask 1 values from the index values
 	mask = np.zeros(len(flux))
