@@ -94,25 +94,28 @@ def readFits(inFile):
 #######################################################################################
 
 
-def templateRedshift(wavelength, t_flux, flux):
+def templateRedshift(t_wavelength, obs_wavelength, t_flux, flux):
 
 	#Convert to numpy arrays
-	wavelength = np.array(wavelength)
+	t_wavelength = np.array(t_wavelength)
+	obs_wavelength = np.array(obs_wavelength)
 	t_flux = np.array(t_flux)
 	flux = np.array(flux)
 
-	#Now the t_flux and flux arrays will be of different lengths, 
-	#append zeros to the shorter array 
+	#Note that the t_flux and flux arrays are of different lengths 
+	#But that doesn't matter in the cross correlation	
+	#Apply the cross correlation 
 
-	if (len(t_flux) - len(flux)) < 0:
-		while len(t_flux < len(flux)):
-			t_flux.append(1)
+	ccf = np.correlate(t_flux, flux, mode='same')
+	plt.close('all')
+	plt.plot(obs_wavelength, ccf)
+	plt.show()
+	print len(ccf)
+	print ccf.argmax()
+	#print obs_wavelength[ccf.argmax()]
+	#print t_wavelength[ccf.argmax()]
 
-	else:
-		while len(flux < len(t_flux)):
-			flux.append(1)
-
-	#So now both the flux and t_flux vectors are the same length hopefully		
+	#print abs(obs_wavelength[ccf.argmax()] - t_wavelength[ccf.argmax()])/np.mean(obs_wavelength)
 
 ##########################################################################################
 #MODULE: fitLines
@@ -206,12 +209,12 @@ def fitLines(flux, wavelength, z, weights):
 	continuum = np.empty(len(masked_flux))
 	for i in range(len(masked_flux)):
 
-		if (i + 10) < len(masked_flux):
-			continuum[i] = ma.median(masked_flux[i:i+5])
+		if (i + 5) < len(masked_flux):
+			continuum[i] = ma.mean(masked_flux[i:i+5])
 			if np.isnan(continuum[i]):
 				continuum[i] = continuum[i - 1]
 		else:
-			continuum[i] = ma.median(masked_flux[i-5:i])
+			continuum[i] = ma.mean(masked_flux[i-5:i])
 			if np.isnan(continuum[i]):
 				continuum[i] = continuum[i - 1]
 
@@ -433,6 +436,8 @@ data=np.genfromtxt('names.txt', dtype=None)
 
 #Loop over each name and apply the defined methods to each of them
 #Ultimately this is computing the physical properties of the galaxies
+normalised_flux = normaliseTemplate('K20_late_composite_original.dat')
+t_wavelength = np.loadtxt('K20_late_composite_original.dat')[:,0]
 for name in data:
 
 	#Read the fits files and define variables from the resulting dictionary
@@ -458,6 +463,10 @@ for name in data:
 	#Now use the galPhys method to compute the physical properties 
 	props = galPhys(flux_Ha, flux_NeII6585, flux_OIII5007, flux_Hb)
 	print props
+	templateRedshift(t_wavelength, wavelength, normalised_flux, flux)
+	print z
+
+
 
 
 
