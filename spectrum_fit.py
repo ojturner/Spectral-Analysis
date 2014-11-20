@@ -7,7 +7,7 @@ import numpy.polynomial.polynomial as poly
 import lmfit
 from lmfit.models import GaussianModel, ExponentialModel, LorentzianModel, VoigtModel, PolynomialModel
 
-#temporarily add my toolkit.py file to the PYTHONPATH
+#add my toolkit.py file to the PYTHONPATH
 sys.path.append('/Users/owenturner/Documents/PhD/SUPA_Courses/AdvancedDataAnalysis/Homeworks')
 
 #and import the toolkit
@@ -36,22 +36,31 @@ import pyfits
 
 
 def readFits(inFile): 
-	#import the relevant modules
+	
 		
 
-	table = pyfits.open(name)
+	table = pyfits.open(inFile)
 	data = table[1].data
 	flux = data.field('flux')
 	wavelength = 10**(data.field('loglam'))
 	ivar = data.field('ivar')
 	weights = ivar
 	redshift_data = table[2].data.field('Z')
-	#y_av = toolkit.movingaverage(flux, 50)
-	#coefs = poly.polyfit(wavelength, flux, 8, w=ivar)
-	#ffit = poly.polyval(wavelength, coefs)
 
-	#print(out.fit_report(min_correl=0.25))
-	#plt.plot(wavelength, out.best_fit, 'r-', linewidth=2)
+	mod = PolynomialModel(6)
+	pars = mod.guess(flux, x=wavelength)
+	out  = mod.fit(flux, pars, x=wavelength)
+	continuum = out.best_fit
+
+	#At the moment get a crude estimate of the observed normalised SED for redshift computation
+	normalised_observed_flux = flux / continuum
+
+	#Call the normaliseTemplate method to find the normalised SED of a given template
+	normalised_template_flux = normaliseTemplate('K20_late_composite_original.dat')
+	plt.close('all')
+
+
+
 
 	#Choose to plot the results 
 	#plt.plot(wavelength, flux, label='flux')
@@ -103,26 +112,39 @@ def fitLines(flux, wavelength, z, weights):
 	out  = mod.fit(flux, pars, x=wavelength)
 	continuum = out.best_fit
 
+	print np.mean(continuum)
+
 	#Subtract the continuum from the flux, just use polynomial fit right now 
 	counts = flux - continuum
 
 	#Define the wavelength values of the relevant emission lines
+	OII3727 = 3727.092
+	OII3729 = 3729.875
 	H_beta = 4862.721
-	H_alpha = 6564.614
 	OIII4959 = 4960.295
 	OIII5007 = 5008.239
+	H_alpha = 6564.614
 	NII6585 = 6585.27
+	SII6718 = 6718.29
+	SII6732 = 6732.68
 
 	#Now apply the redshift formula to find where this will be observed
-	H_alpha_shifted = H_alpha * (1 + z)
+	#Note that for these SDSS spectra the OII doublet is not in range
+	OII3727_shifted = OII3727 * (1 + z)
+	OII3729_shifted = OII3729 * (1 + z)
 	H_beta_shifted = H_beta * (1 + z)
 	OIII4959_shifted = OIII4959 * (1 + z)
 	OIII5007_shifted = OIII5007 * (1 + z)
+	H_alpha_shifted = H_alpha * (1 + z)
 	NII6585_shifted = NII6585 * (1 + z)
+	SII6718_shifted = SII6718 * (1 + z)
+	SII6732_shifted = SII6732 * (1 + z)
 
 	#Construct a dictionary housing these shifted emission line values 
-	line_dict = {'H_alpha' : H_alpha_shifted, 'H_beta' : H_beta_shifted, 
-	'OIII4959' : OIII4959_shifted, 'OIII5007' : OIII5007_shifted, 'NII6585' : NII6585_shifted}
+	#Note that values for the OII doublet are not present
+	line_dict = {'H_beta' : H_beta_shifted, 'OIII4959' : OIII4959_shifted, 
+	'OIII5007' : OIII5007_shifted, 'H_alpha' : H_alpha_shifted, 'NII6585' : NII6585_shifted, 
+	'SII6718' : SII6718_shifted, 'SII6732' : SII6732_shifted}
 
 	#Plot the initial continuum subtracted spectrum
 	plt.plot(wavelength, counts)
@@ -130,8 +152,10 @@ def fitLines(flux, wavelength, z, weights):
 	#Initialise a dictionary for the results in the for loop
 	results_dict = {}
 
+	print np.min(wavelength)
 	#Begin for loop to fit an arbitrary number of emission lines
 	for key in line_dict:
+		
 	
 	########################################################################
 	#FITTING EACH OF THE EMISSION LINES IN TURN
@@ -141,18 +165,14 @@ def fitLines(flux, wavelength, z, weights):
 	#The appropriate range is stored in fit_wavelength etc.
 
 	#Use np.where to find the indices of data surrounding the gaussian
-		index = np.where( wavelength > (line_dict[key] - 10) )
-		new_wavelength = wavelength[index]
-		new_counts = counts[index]
-		new_weights = weights[index]
-		new_continuum = continuum[index]
-		new_index = np.where( new_wavelength < (line_dict[key] + 10))
+		new_index = np.where(np.logical_and(wavelength > (line_dict[key] - 10) ,
+											wavelength < (line_dict[key] + 10)))  
 
 	#Select only data for the fit with these indices
-		fit_wavelength = new_wavelength[new_index]
-		fit_counts = new_counts[new_index]
-		fit_weights = new_weights[new_index]
-		fit_continuum = new_continuum[new_index]
+		fit_wavelength = wavelength[new_index]
+		fit_counts = counts[new_index]
+		fit_weights = weights[new_index]
+		fit_continuum = continuum[new_index]
 
 	#Compute the equivalent width
 		edge_continuum = fit_counts[0]
@@ -211,12 +231,12 @@ def fitLines(flux, wavelength, z, weights):
 #USAGE: 	results_dict = galPhys(flux_Ha, flux_NeII6585)
 ###########################################################################################
 
-def galPhys(flux_Ha, flux_NeII6585):
+def galPhys(flux_Ha, flux_NeII6585, flux_OIII5007, flux_Hb):
 
 	#Find the luminosity distance of the object at redshift z 
 	#Convert the luminosity distance to cm  
 	D_L = toolkit.cosmoDistanceQuad(z, 69.6, 0.286, 0.714)['D_L']
-	D_L = D_L * 3.086E26
+	D_L = D_L * 3.086E24
 
 	#Compute H-alpha Luminosity in ergs / s
 	Lum_Ha = 4 * np.pi * (D_L**2) * flux_Ha
@@ -227,8 +247,104 @@ def galPhys(flux_Ha, flux_NeII6585):
 	#Compute the metallicity from the DO2 calibration
 	Met = 9.12 + (0.73 * (flux_NeII6585/flux_Ha))
 
-	return {'SFR' : SFR, 'Metallicity' : Met}
+	OIII_ratio = np.log10((flux_OIII5007 * flux_Ha)/(flux_NeII6585 * flux_Hb))
 
+	Met_2 = 8.73 - (0.32 * OIII_ratio)
+
+	return {'SFR' : SFR, 'Metallicity_NII' : Met, 'Metallicity_OIII/NII' : Met_2}
+
+##########################################################################################
+#MODULE: normaliseTemplate
+#
+#PURPOSE:
+#Take a file with template galaxy wavelength and flux values, computed from a galaxy SED code 
+#and 
+#
+#INPUTS:
+#
+#			inFile: SED file containing flux and wavelength in columns 0 and 1
+#
+#
+#OUTPUTS: 	Dictionary: containing the normalised flux, i.e. flux / continuum and the 
+#						wavelength values in the spectral template
+#
+#
+#USAGE: 	normalised_flux = normaliseTemplate(inFile)
+###########################################################################################
+
+def normaliseTemplate(inFile):
+
+	#Read in the file and assign the flux and wavelength vectors
+	template = np.loadtxt(inFile)
+	wavelength = template[:,0]
+	flux = template[:,1]
+
+	#Plot the initial spectrum 
+	plt.plot(wavelength, flux, color='green', label='template_spectrum')
+
+	#Hardwire in the wavelength values
+	OII = 3727
+	H_beta = 4861 
+	OIII_one = 4958
+	OIII_two = 5006
+	NII_one = 6548
+	H_alpha = 6562
+	NII_two = 6583
+	SII_one = 6716
+	SII_two = 6730
+
+	#Will choose to mask pm 30 for each of the lines
+	OII_index = np.where(np.logical_and(wavelength>=(OII - 15), wavelength<=(OII + 15)))
+	H_beta_index = np.where(np.logical_and(wavelength>=(H_beta - 15), wavelength<=(H_beta + 15)))
+	OIII_one_index = np.where(np.logical_and(wavelength>=(OIII_one - 15), wavelength<=(OIII_one + 15)))
+	OIII_two_index = np.where(np.logical_and(wavelength>=(OIII_two - 15), wavelength<=(OIII_two + 15)))
+	NII_one_index = np.where(np.logical_and(wavelength>=(NII_one - 15), wavelength<=(NII_one + 15)))
+	H_alpha_index = np.where(np.logical_and(wavelength>=(H_alpha - 15), wavelength<=(H_alpha + 15)))
+	NII_two_index = np.where(np.logical_and(wavelength>=(NII_two - 15), wavelength<=(NII_two + 15)))
+	SII_one_index = np.where(np.logical_and(wavelength>=(SII_one - 15), wavelength<=(SII_one + 15)))
+	SII_two_index = np.where(np.logical_and(wavelength>=(SII_two - 15), wavelength<=(SII_two + 15)))
+
+	index_list = np.append(OII_index, H_beta_index)
+
+	#define the mask 1 values from the index values
+	mask = np.zeros(len(flux))
+	mask[OII_index] = 1
+	mask[H_beta_index] = 1
+	mask[OIII_one_index] = 1
+	mask[OIII_two_index] = 1
+	mask[NII_one_index] = 1
+	mask[H_alpha_index] = 1
+	mask[NII_two_index] = 1
+	mask[SII_one_index] = 1
+	mask[SII_two_index] = 1
+
+	#Now apply these to the flux to mask 
+	masked_flux = ma.masked_array(flux, mask=mask)
+
+	#Make my own with np.mean()
+	continuum = np.empty(len(masked_flux))
+	for i in range(len(masked_flux)):
+
+		if (i + 10) < len(masked_flux):
+			continuum[i] = ma.median(masked_flux[i:i+5])
+			if np.isnan(continuum[i]):
+				continuum[i] = continuum[i - 1]
+		else:
+			continuum[i] = ma.median(masked_flux[i-5:i])
+			if np.isnan(continuum[i]):
+				continuum[i] = continuum[i - 1]
+
+	#Which works, (so long as I'm careful with masked values)
+	#Now divide by the continuum and plot the final template
+
+	normalised_flux = flux / continuum
+
+	#Show off the plots
+	plt.plot(wavelength, masked_flux, color='red', label='masked')
+	plt.plot(wavelength, continuum, color='purple', linewidth=3, label='continuum')
+	plt.plot(wavelength, normalised_flux, color='black', linewidth=2, label='normalised')
+
+	return normalised_flux
 
 
 
@@ -253,15 +369,21 @@ for name in data:
 	#print fit_results
 
 	#Now show the plots if we want
-	#plt.show()
+	plt.show()
 
 	#The given flux is in 10^-17 ergs / s / cm^2, grab from the fitLines results
 	flux_Ha = fit_results['H_alpha'][0] * 1E-17 
+	flux_Hb	= fit_results['H_beta'][0] * 1E-17
 	flux_NeII6585 = fit_results['NII6585'][0] * 1E-17
+	flux_OIII5007 = fit_results['OIII5007'][0] * 1E-17
 
 	#Now use the galPhys method to compute the physical properties 
-	props = galPhys(flux_Ha, flux_NeII6585)
+	props = galPhys(flux_Ha, flux_NeII6585, flux_OIII5007, flux_Hb)
 	print props
+
+
+
+
 
 
 
