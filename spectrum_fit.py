@@ -140,6 +140,8 @@ def templateRedshift(t_wavelength, obs_wavelength, t_flux, flux):
 #######################################################################################
 
 
+#Will try fitLines using a composite model i.e. multi gaussian fit
+
 def fitLines(flux, wavelength, z, weights): 	
 
 	#Convert all into numpy arrays 
