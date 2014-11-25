@@ -223,7 +223,7 @@ def fitLines(flux, wavelength, z, weights):
 	
 
 	#Subtract the continuum from the flux, just use polynomial fit right now 
-	counts = flux - continuum
+	counts = flux - continuum_poly
 
 	#Construct a dictionary housing these shifted emission line values 
 	#Note that values for the OII doublet are not present
@@ -365,7 +365,7 @@ def normaliseTemplate(inFile):
 	flux = template[:,1]
 
 	#Plot the initial spectrum 
-	plt.plot(wavelength, flux, color='green', label='template_spectrum')
+	
 
 	#Hardwire in the wavelength values
 	OII = 3727
@@ -409,11 +409,11 @@ def normaliseTemplate(inFile):
 	for i in range(len(masked_flux)):
 
 		if (i + 10) < len(masked_flux):
-			continuum[i] = ma.median(masked_flux[i:i+5])
+			continuum[i] = ma.median(masked_flux[i:i+10])
 			if np.isnan(continuum[i]):
 				continuum[i] = continuum[i - 1]
 		else:
-			continuum[i] = ma.median(masked_flux[i-5:i])
+			continuum[i] = ma.median(masked_flux[i-10:i])
 			if np.isnan(continuum[i]):
 				continuum[i] = continuum[i - 1]
 
@@ -423,9 +423,11 @@ def normaliseTemplate(inFile):
 	normalised_flux = flux / continuum
 
 	#Show off the plots
-	plt.plot(wavelength, masked_flux, color='red', label='masked')
-	plt.plot(wavelength, continuum, color='purple', linewidth=3, label='continuum')
+	plt.plot(wavelength, continuum, color='purple', linewidth=2, label='continuum')
 	plt.plot(wavelength, normalised_flux, color='black', linewidth=2, label='normalised')
+	plt.plot(wavelength, flux, color='green', label='template_spectrum')
+	plt.plot(wavelength, masked_flux, color='red', label='masked')
+	
 
 	return normalised_flux
 
@@ -439,6 +441,9 @@ data=np.genfromtxt('names.txt', dtype=None)
 #Loop over each name and apply the defined methods to each of them
 #Ultimately this is computing the physical properties of the galaxies
 normalised_flux = normaliseTemplate('K20_late_composite_original.dat')
+plt.legend()
+plt.show()
+plt.close('all')
 t_wavelength = np.loadtxt('K20_late_composite_original.dat')[:,0]
 for name in data:
 
@@ -465,8 +470,8 @@ for name in data:
 	#Now use the galPhys method to compute the physical properties 
 	props = galPhys(flux_Ha, flux_NeII6585, flux_OIII5007, flux_Hb)
 	print props
-	templateRedshift(t_wavelength, wavelength, normalised_flux, flux)
-	print z
+	#templateRedshift(t_wavelength, wavelength, normalised_flux, flux)
+	#print z
 
 
 
