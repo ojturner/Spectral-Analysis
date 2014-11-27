@@ -243,13 +243,14 @@ def fluxError(counts, wavelength, error):
 	#And choose the option not to vary this parameter 
 	#Leave the guessed values of the other parameters
 		pars['center'].set(value = np.mean(wavelength))
-		
+
 
 	#Now perform the fit to the data using the set and guessed parameters 
 	#And the inverse variance weights form the fits file 
 		out  = mod.fit(new_counts, pars, x=wavelength)
 		flux = out.best_values['amplitude']
 		flux_vector.append(flux)
+
 	print 'Hello', flux_vector
 	#Now return the standard deviation of the flux_vector as the flux error 
 	return np.std(flux_vector)	
