@@ -53,7 +53,7 @@ def readFits(inFile):
 	continuum = out.best_fit
 
 	#At the moment get a crude estimate of the observed normalised SED for redshift computation
-	normalised_observed_flux = flux / continuum
+	normalised_observed_flux = flux - continuum
 
 	#Call the normaliseTemplate method to find the normalised SED of a given template
 	normalised_template_flux = normaliseTemplate('K20_late_composite_original.dat')
@@ -71,7 +71,8 @@ def readFits(inFile):
 	#plt.close('all')
 
 	
-	return {'flux' : flux, 'wavelength' : wavelength, 'z' : redshift_data, 'weights': weights}
+	return {'flux' : flux, 'wavelength' : wavelength,
+	 'z' : redshift_data, 'weights': weights, 'norm_flux':normalised_observed_flux}
 
 ##########################################################################################
 #MODULE: templateRedshift
@@ -102,20 +103,157 @@ def templateRedshift(t_wavelength, obs_wavelength, t_flux, flux):
 	t_flux = np.array(t_flux)
 	flux = np.array(flux)
 
-	#Note that the t_flux and flux arrays are of different lengths 
-	#But that doesn't matter in the cross correlation	
-	#Apply the cross correlation 
+	#Create grids of the wavelength and flux values 
+	obs_grid = np.array([obs_wavelength, flux])
+	t_grid = np.array([t_wavelength, t_flux])
 
-	ccf = np.correlate(t_flux, flux, mode='same')
+	#Find the resolution of both the template and observed wavelength arrays
+	r_template = (t_wavelength[1] - t_wavelength[0]) / len(t_wavelength)
+	r_observed = (obs_wavelength[1] - obs_wavelength[0]) / len(obs_wavelength)
+
+	#Find the maximum and minimum wavelength of both arrays 
+	min_wavelength = min(min(t_wavelength), min(obs_wavelength))
+	max_wavelength = max(max(t_wavelength), max(obs_wavelength))
+	
+
+	#Decide which wavelength array has the highest resolution
+	#Use this to populate the grid of wavelengths. 
+	d_lamba_obs = obs_wavelength[1] - obs_wavelength[0]
+	d_lamba_temp = t_wavelength[1] - t_wavelength[0]
+	obs_division = (max_wavelength - min_wavelength) / len(obs_wavelength)
+	t_division = (max_wavelength - min_wavelength) / len(t_wavelength)
+
+
+	if r_template > r_observed: 
+		wavelength_grid = np.arange(min_wavelength, max_wavelength, t_division)
+	else: 
+		wavelength_grid = np.arange(min_wavelength, max_wavelength, obs_division)
+
+	#Grid now paritally setup: have to bin up the flux values corresponding to 
+	#the range in wavelength spanned by each step in the wavelength grid
+	#First create a final wavelength and flux grid for both the template and 
+	#the observed spectrum and initially fill the flux values with 0's and the
+	#wavelength values with the wavelength grid from above
+	flux_zeros = np.zeros(len(wavelength_grid))
+	obs_grid_final = np.array([wavelength_grid, flux_zeros])
+	t_grid_final = np.array([wavelength_grid, flux_zeros])
+
+	#Now fairly complicated for loop to compute the flux values for both of these grids
+	for i in range((len(obs_grid_final[0]) - 1)): 
+		#Create an empty array to house the flux average
+		flux_avg = []
+		#find the indices of the wavelength values in the correct range  
+		index_list = np.where(np.logical_and(
+			obs_grid[0] > obs_grid_final[0][i], 
+			obs_grid[0] < obs_grid_final[0][i + 1]))
+
+		#If the index list is empty, set the flux value to 0
+		if len(index_list[0]) == 0:
+			obs_grid_final[1][i] = 0.0
+
+		#Otherwise average all of the flux values within the interval	
+		else:
+			
+			#Now find the flux values that these indices correspond to and add to flux avg array
+			for entry in index_list:
+				flux_avg.append(obs_grid[1][entry])
+			#Append the mean of the averaged fluxes to the final grid 
+			obs_grid_final[1][i] = np.mean(flux_avg)		
+
+	#Repeat the same process for the template flux grid
+	for i in range((len(t_grid_final[0]) - 1)): 
+		#Create an empty array to house the flux average
+		flux_avg = []
+		#find the indices of the wavelength values in the correct range  
+		index_list = np.where(np.logical_and(
+			t_grid[0] > t_grid_final[0][i], 
+			t_grid[0] < t_grid_final[0][i + 1]))
+
+		#If the index list is empty, set the flux value to 0
+		if len(index_list[0]) == 0:
+			t_grid_final[1][i] = 0.0
+
+		#Otherwise average all of the flux values within the interval	
+		else:
+			
+			#Now find the flux values that these indices correspond to and add to flux avg array
+			for entry in index_list:
+				flux_avg.append(t_grid[1][entry])
+			#Append the mean of the averaged fluxes to the final grid 
+			t_grid_final[1][i] = np.mean(flux_avg)	
+
+	obs_grid_final[1][-1] = obs_grid[1][-1]	
+	t_grid_final[1][-1] = t_grid[1][-1]	
+
+
+
+	print t_grid_final[1], obs_grid_final[1]
+	print len(t_grid_final), len(obs_grid_final)
+
+	#Now we have the template and observed fluxes on a common footing 
+	#How do we take the cross correlation of these two? 
+
+	if r_template > r_observed: 
+		k = np.arange(0, len(t_grid_final[1])*t_division, t_division)
+	else: 
+		k = np.arange(0, len(obs_grid_final[1])*obs_division, obs_division)
+
+	
+	#Maybe need to reverse the order of the second vector
+	ccf = np.correlate(t_grid_final[1], obs_grid_final[1], mode='same')
 	plt.close('all')
-	plt.plot(obs_wavelength, ccf)
+
+	plt.plot(k, ccf)
 	plt.show()
-	print len(ccf)
 	print ccf.argmax()
+
 	#print obs_wavelength[ccf.argmax()]
 	#print t_wavelength[ccf.argmax()]
 
 	#print abs(obs_wavelength[ccf.argmax()] - t_wavelength[ccf.argmax()])/np.mean(obs_wavelength)
+
+def fluxError(counts, wavelength, error):
+	flux_vector = []
+	for i in range(100):
+		new_counts=[]
+		i = 0
+		for point in counts:
+			new_counts.append(np.random.normal(point, error[i]))
+			i = i + 1
+		new_counts = np.array(new_counts)
+		#So for each N in 1000 a new counts vector is generated randomly
+		#Take this data against the wavelength values and fit a gaussian 
+		#each time to compute the flux. Append this to a vector and then 
+		#find the standard deviation to get the flux error for that emission line
+		#Note this is to be encorporated in the fitLines module so that each of the emission 
+		#lines is fit in turn. Next step here is to construct the model with lmfit, 
+		#guess the initial parameters and then fit the gaussian and take 
+		#out.best_values('amplitude') as the flux and store in flux_vector	
+
+		#Now use the lmfit package to perform gaussian fits to the data	
+		#Construct the gaussian model
+		mod = GaussianModel()
+
+	#Take an initial guess at what the model parameters are 
+	#In this case the gaussian model has three parameters, 
+	#Which are amplitude, center and sigma
+		pars = mod.guess(new_counts, x=wavelength)
+
+	#We know from the redshift what the center of the gaussian is, set this
+	#And choose the option not to vary this parameter 
+	#Leave the guessed values of the other parameters
+		pars['center'].set(value = np.mean(wavelength))
+		
+
+	#Now perform the fit to the data using the set and guessed parameters 
+	#And the inverse variance weights form the fits file 
+		out  = mod.fit(new_counts, pars, x=wavelength)
+		flux = out.best_values['amplitude']
+		flux_vector.append(flux)
+	print 'Hello', flux_vector
+	#Now return the standard deviation of the flux_vector as the flux error 
+	return np.std(flux_vector)	
+
 
 ##########################################################################################
 #MODULE: fitLines
@@ -149,6 +287,7 @@ def fitLines(flux, wavelength, z, weights):
 	wavelength = np.array(wavelength)
 	z = np.array(z)
 	weights = np.array(weights)
+	error = np.sqrt(1 / weights)
 
 	#Fit a polynomial to the continuum background emission of the galaxy
 	#This is the crude way to do it 
@@ -237,7 +376,6 @@ def fitLines(flux, wavelength, z, weights):
 	#Initialise a dictionary for the results in the for loop
 	results_dict = {}
 
-	print np.min(wavelength)
 	#Begin for loop to fit an arbitrary number of emission lines
 	for key in line_dict:
 		
@@ -287,13 +425,17 @@ def fitLines(flux, wavelength, z, weights):
 	#Plot the results and the spectrum to check the fit
 		plt.plot(fit_wavelength, out.best_fit, 'r-')
 	
+	#Return the error on the flux 
+		flux_error = fluxError(fit_counts, fit_wavelength, error)
 
 	#The amplitude parameter is the area under the curve, equivalent to the flux
-		results_dict[key] = [out.best_values['amplitude'], out.best_values['sigma'], 2.3548200*out.best_values['sigma'], E_w]
-	
+		results_dict[key] = [out.best_values['amplitude'], out.best_values['sigma'], 
+		2.3548200*out.best_values['sigma'], E_w, flux_error]
+
 
 	#The return dictionary for this method is a sequence of results vectors
 	return results_dict
+
 
 ##########################################################################################
 #MODULE: galPhys
@@ -420,7 +562,7 @@ def normaliseTemplate(inFile):
 	#Which works, (so long as I'm careful with masked values)
 	#Now divide by the continuum and plot the final template
 
-	normalised_flux = flux / continuum
+	normalised_flux = flux - continuum
 
 	#Show off the plots
 	plt.plot(wavelength, continuum, color='purple', linewidth=2, label='continuum')
@@ -438,26 +580,32 @@ def normaliseTemplate(inFile):
 #Read the names of the fits files in 
 data=np.genfromtxt('names.txt', dtype=None)
 
-#Loop over each name and apply the defined methods to each of them
-#Ultimately this is computing the physical properties of the galaxies
+
+#Manually read in the properties from one of the template spectra
 normalised_flux = normaliseTemplate('K20_late_composite_original.dat')
 plt.legend()
 plt.show()
 plt.close('all')
 t_wavelength = np.loadtxt('K20_late_composite_original.dat')[:,0]
+
+#Loop round the input file names and compute all properties from the spectra
+#Loop over each name and apply the defined methods to each of them
+#Ultimately this is computing the physical properties of the galaxies
 for name in data:
 
 	#Read the fits files and define variables from the resulting dictionary
 	dict_results = readFits(name)
 	flux = dict_results['flux']		
+	norm_flux = dict_results['norm_flux']
 	wavelength = dict_results['wavelength']
 	z = dict_results['z']
 	weights = dict_results['weights']
+	error = np.sqrt(1 / weights)
 
 	#Fit the emission lines using the defined method, plot the results
 	fit_results = fitLines(flux, wavelength, z, weights)
 	#print fit_results
-
+	print fit_results
 	#Now show the plots if we want
 	plt.show()
 
@@ -470,8 +618,8 @@ for name in data:
 	#Now use the galPhys method to compute the physical properties 
 	props = galPhys(flux_Ha, flux_NeII6585, flux_OIII5007, flux_Hb)
 	print props
-	#templateRedshift(t_wavelength, wavelength, normalised_flux, flux)
-	#print z
+	templateRedshift(t_wavelength, wavelength, normalised_flux, norm_flux)
+	print z
 
 
 
