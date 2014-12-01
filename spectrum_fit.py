@@ -214,12 +214,12 @@ def templateRedshift(t_wavelength, obs_wavelength, t_flux, flux):
 
 def fluxError(counts, wavelength, error):
 	flux_vector = []
-	for i in range(100):
+	for i in range(5):
 		new_counts=[]
-		i = 0
+		j = 0
 		for point in counts:
-			new_counts.append(np.random.normal(point, error[i]))
-			i = i + 1
+			new_counts.append(np.random.normal(point, error[j]))
+			j = j + 1
 		new_counts = np.array(new_counts)
 		#So for each N in 1000 a new counts vector is generated randomly
 		#Take this data against the wavelength values and fit a gaussian 
@@ -250,6 +250,7 @@ def fluxError(counts, wavelength, error):
 		out  = mod.fit(new_counts, pars, x=wavelength)
 		flux = out.best_values['amplitude']
 		flux_vector.append(flux)
+		plt.plot(wavelength, out.best_fit, 'r-')
 
 	print 'Hello', flux_vector
 	#Now return the standard deviation of the flux_vector as the flux error 
