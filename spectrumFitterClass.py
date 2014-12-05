@@ -220,8 +220,13 @@ class spectrumFit(object):
 
 
 
+<<<<<<< HEAD
 		print t_grid_final[1], obs_grid_final[1]
 		print len(t_grid_final[0]), len(obs_grid_final)
+=======
+		#print t_grid_final[1], obs_grid_final[1]
+		#print len(t_grid_final[0]), len(obs_grid_final)
+>>>>>>> compositeModel
 
 		#Now we have the template and observed fluxes on a common footing 
 		#How do we take the cross correlation of these two? 
@@ -236,9 +241,107 @@ class spectrumFit(object):
 		ccf = np.correlate(t_grid_final[1], obs_grid_final[1], mode='same')
 		plt.close('all')
 
+<<<<<<< HEAD
 		plt.plot(k, ccf)
 		plt.show()
 		print ccf.argmax()
+=======
+		#plt.plot(k, ccf)
+		#plt.show()
+		#print ccf.argmax()
+
+##########################################################################################
+#MODULE: zFromTemp
+#
+#PURPOSE:
+#Take both the normalised template flux and crude normalised observed flux (or should 
+#this be continuum subtracted?) and shift the template to find the redshift value
+#the idea is to write this for a single template so that it can be looped around for many
+#
+#INPUTS:
+#
+#			wavelength: base wavelength array to plot against
+#			t_flux: normalised template flux to 1  
+#			flux: normalised observed flux to 1 		
+#			
+#
+#OUTPUTS: 	z: Best redshift estimate from that template 
+#
+#USAGE: 	redshift = zFromTemp(wavelength, t_flux, flux)
+#######################################################################################
+
+
+	def zFromTemp(self, t_wavelength, obs_wavelength, t_flux, flux):
+
+		#Convert to numpy arrays
+		t_wavelength = np.array(t_wavelength)
+		obs_wavelength = np.array(obs_wavelength)
+		t_flux = np.array(t_flux)
+		flux = np.array(flux)
+
+		#Create grids of the wavelength and flux values 
+		obs_grid = np.array([obs_wavelength, flux])
+		t_grid = np.array([t_wavelength, t_flux])
+
+		#Create a grid of redshift values 
+		z_grid = np.arange(0, 0.15, 0.001)
+
+		
+		#Create vector to house the computed cross correlation point
+		#at each shift in wavelength
+		ccf = []
+
+		for z in z_grid:
+
+
+			#shift the wavelength grid by (1 + z) each time
+			wavelength_values = t_grid[0] * (1 + z)
+			wavelength_grid = np.array([wavelength_values, t_flux])
+
+			#Grid now partially setup: have to bin up the flux values corresponding to 
+			#the range in wavelength spanned by each step in the wavelength grid
+			#First create a final wavelength and flux grid for both the template and 
+			#the observed spectrum and initially fill the flux values with 0's and the
+			#wavelength values with the wavelength grid from above
+			flux_zeros = np.zeros(len(obs_grid[0]))
+			t_grid_final = np.array([obs_grid[0], flux_zeros])
+
+			#Now fairly complicated for loop to compute the flux values for both of these grids
+			for i in range((len(t_grid_final[0]) - 1)): 
+				#Create an empty array to house the flux average
+				flux_avg = []
+				#find the indices of the wavelength values in the correct range  
+				index_list = np.where(np.logical_and(
+					wavelength_grid[0] > t_grid_final[0][i], 
+					wavelength_grid[0] < t_grid_final[0][i + 1]))
+
+				#If the index list is empty, set the flux value to 0
+				if len(index_list[0]) == 0:
+					t_grid_final[1][i] = 0.0
+
+				#Otherwise average all of the flux values within the interval	
+				else:
+			
+					#Now find the flux values that these indices correspond to and add to flux avg array
+					for entry in index_list:
+						flux_avg.append(wavelength_grid[1][entry])
+					#Append the mean of the averaged fluxes to the final grid 
+					t_grid_final[1][i] = np.mean(flux_avg)
+
+			ccf_value = sum(t_grid_final[1] * obs_grid[1])
+			print ccf_value
+			ccf.append(ccf_value)
+			print 'This is the ccf: ', ccf
+		ccf = np.array(ccf)	
+		print len(ccf)
+		print len(z_grid)	
+		print z_grid[ccf.argmax()]
+		plt.plot(z_grid, ccf, label='Cross Correlation Function')
+		plt.legend()
+		plt.savefig('Cross_corr.png')	
+		plt.close('all')
+		#plt.show()
+
 
 ##########################################################################################
 #MODULE: fluxError
