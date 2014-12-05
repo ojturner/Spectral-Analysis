@@ -28,12 +28,9 @@ for name in data:
 	#Fit the emission lines using the defined method, plot the results
 	fit_results = spec.fitLines(spec_prop['flux'], spec_prop['wavelength'], \
  		spec_prop['z'], spec_prop['weights'])
-	#print fit_results
-<<<<<<< HEAD
+	
 	print fit_results	
-=======
-	print fit_results
->>>>>>> compositeModel
+
 
 	#Now use the galPhys method to compute the physical properties 
 	props = spec.galPhys(spec_prop['z'], fit_results['H_alpha'][0] * 1E-17, \
@@ -42,15 +39,10 @@ for name in data:
 	print props
 
 	#Attempt to compute redshift with the templateRedshift method
-<<<<<<< HEAD
-	spec.templateRedshift(temp_wavelength, spec_prop['wavelength'], \
-		n_temp_flux, spec_prop['norm_flux'])
-	print spec_prop['z']
-=======
 	#spec.zFromTemp(temp_wavelength, spec_prop['wavelength'], \
-		#n_temp_flux, spec_prop['norm_flux'])
+	#	n_temp_flux, spec_prop['norm_flux'])
 	#print spec_prop['z']
->>>>>>> compositeModel
+
 
 
 

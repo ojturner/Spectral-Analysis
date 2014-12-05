@@ -325,7 +325,7 @@ class spectrumFit(object):
 		plt.legend()
 		plt.savefig('Cross_corr.png')	
 		plt.close('all')
-		#plt.show()
+		plt.show()
 
 
 ##########################################################################################
