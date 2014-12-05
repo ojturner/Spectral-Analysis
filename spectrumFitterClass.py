@@ -219,15 +219,8 @@ class spectrumFit(object):
 		t_grid_final[1][-1] = t_grid[1][-1]	
 
 
-
-<<<<<<< HEAD
-		print t_grid_final[1], obs_grid_final[1]
-		print len(t_grid_final[0]), len(obs_grid_final)
-=======
 		#print t_grid_final[1], obs_grid_final[1]
 		#print len(t_grid_final[0]), len(obs_grid_final)
->>>>>>> compositeModel
-
 		#Now we have the template and observed fluxes on a common footing 
 		#How do we take the cross correlation of these two? 
 
@@ -241,14 +234,6 @@ class spectrumFit(object):
 		ccf = np.correlate(t_grid_final[1], obs_grid_final[1], mode='same')
 		plt.close('all')
 
-<<<<<<< HEAD
-		plt.plot(k, ccf)
-		plt.show()
-		print ccf.argmax()
-=======
-		#plt.plot(k, ccf)
-		#plt.show()
-		#print ccf.argmax()
 
 ##########################################################################################
 #MODULE: zFromTemp
