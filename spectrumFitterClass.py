@@ -310,7 +310,7 @@ class spectrumFit(object):
 		#plt.plot(wavelength, out.best_fit)
 		
 
-		print 'Hello', flux_vector
+		print flux_vector
 	#Now return the standard deviation of the flux_vector as the flux error 
 		return {'flux_error' : np.std(flux_vector), 'E_W_error' : np.std(E_W_vector)}
 
@@ -491,6 +491,7 @@ class spectrumFit(object):
 			2.3548200*out.best_values['sigma'], E_w, error_dict['E_W_error']]
 
 		plt.show()	
+		#plt.savefig('fitted_spectrum.png')
 		#The return dictionary for this method is a sequence of results vectors
 		return results_dict	
 
@@ -638,7 +639,9 @@ class templateSpec(object):
 		plt.plot(wavelength, normalised_flux, color='black', linewidth=2, label='normalised')
 		plt.plot(wavelength, flux, color='green', label='template_spectrum')
 		plt.plot(wavelength, masked_flux, color='red', label='masked')
+		plt.legend()
 		plt.show()
+		#plt.savefig('template_spectrum.png')
 		
 
 		return {'norm_flux' : normalised_flux, 'wavelength' : wavelength}

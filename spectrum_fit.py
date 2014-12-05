@@ -188,7 +188,7 @@ def templateRedshift(t_wavelength, obs_wavelength, t_flux, flux):
 
 
 	print t_grid_final[1], obs_grid_final[1]
-	print len(t_grid_final), len(obs_grid_final)
+	print len(t_grid_final[0]), len(obs_grid_final)
 
 	#Now we have the template and observed fluxes on a common footing 
 	#How do we take the cross correlation of these two? 
@@ -198,7 +198,7 @@ def templateRedshift(t_wavelength, obs_wavelength, t_flux, flux):
 	else: 
 		k = np.arange(0, len(obs_grid_final[1])*obs_division, obs_division)
 
-	
+
 	#Maybe need to reverse the order of the second vector
 	ccf = np.correlate(t_grid_final[1], obs_grid_final[1], mode='same')
 	plt.close('all')
@@ -212,9 +212,36 @@ def templateRedshift(t_wavelength, obs_wavelength, t_flux, flux):
 
 	#print abs(obs_wavelength[ccf.argmax()] - t_wavelength[ccf.argmax()])/np.mean(obs_wavelength)
 
-def fluxError(counts, wavelength, error):
+
+
+##########################################################################################
+#MODULE: fluxError
+#
+#PURPOSE:
+#Monte carlo simulation for computing the error on the fitted flux measurement 
+#and also the error on the equivalent width 
+#
+#INPUTS:
+#			counts: photon counts surrounding a particular emission line
+#			wavelength: corresponding wavelength values attached to these fluxes
+#			error: The errors on the counts 
+#			continuum: the stellar continuum vector (counts is assumed already continuum subtracted) 		
+#			
+#
+#OUTPUTS: 	error_dict = dictionary containing the keys flux_error and eq_error 
+#
+#USAGE: 	redshift = templateRedshift(wavelength, t_flux, flux)
+#######################################################################################
+
+
+def fluxError(counts, wavelength, error, continuum):
 	flux_vector = []
-	for i in range(5):
+	E_W_vector = []
+	cont_avg = np.mean(continuum)
+	#plt.close('all')
+
+	for i in range(100):
+		#plt.errorbar(wavelength, counts, yerr=error)
 		new_counts=[]
 		j = 0
 		for point in counts:
@@ -249,12 +276,16 @@ def fluxError(counts, wavelength, error):
 	#And the inverse variance weights form the fits file 
 		out  = mod.fit(new_counts, pars, x=wavelength)
 		flux = out.best_values['amplitude']
+		E_W = out.best_values['amplitude'] / cont_avg
 		flux_vector.append(flux)
-		plt.plot(wavelength, out.best_fit, 'r-')
+		E_W_vector.append(E_W)
+		#plt.scatter(wavelength, new_counts)
+		#plt.plot(wavelength, out.best_fit)
+		
 
 	print 'Hello', flux_vector
 	#Now return the standard deviation of the flux_vector as the flux error 
-	return np.std(flux_vector)	
+	return {'flux_error' : np.std(flux_vector), 'E_W_error' : np.std(E_W_vector)}	
 
 
 ##########################################################################################
@@ -398,11 +429,9 @@ def fitLines(flux, wavelength, z, weights):
 		fit_counts = counts[new_index]
 		fit_weights = weights[new_index]
 		fit_continuum = continuum[new_index]
+		fit_error = error[new_index]
 
-	#Compute the equivalent width
-		edge_continuum = fit_counts[0]
-		delta_lambda = abs(fit_wavelength[1] - fit_wavelength[0])	
-		E_w = sum(abs(1 - (fit_counts/edge_continuum))) * delta_lambda
+
 
 	#Now use the lmfit package to perform gaussian fits to the data	
 	#Construct the gaussian model
@@ -428,11 +457,15 @@ def fitLines(flux, wavelength, z, weights):
 		plt.plot(fit_wavelength, out.best_fit, 'r-')
 	
 	#Return the error on the flux 
-		flux_error = fluxError(fit_counts, fit_wavelength, error)
+		error_dict = fluxError(fit_counts, fit_wavelength, fit_error, continuum_poly)
+
+	#Compute the equivalent width
+		con_avg = np.mean(continuum_poly)
+		E_w = out.best_values['amplitude'] / con_avg
 
 	#The amplitude parameter is the area under the curve, equivalent to the flux
-		results_dict[key] = [out.best_values['amplitude'], out.best_values['sigma'], 
-		2.3548200*out.best_values['sigma'], E_w, flux_error]
+		results_dict[key] = [out.best_values['amplitude'], error_dict['flux_error'], out.best_values['sigma'], 
+		2.3548200*out.best_values['sigma'], E_w, error_dict['E_W_error']]
 
 
 	#The return dictionary for this method is a sequence of results vectors
@@ -609,6 +642,7 @@ for name in data:
 	#print fit_results
 	print fit_results
 	#Now show the plots if we want
+	plt.legend()
 	plt.show()
 
 	#The given flux is in 10^-17 ergs / s / cm^2, grab from the fitLines results
